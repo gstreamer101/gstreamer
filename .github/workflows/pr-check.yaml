@@ -1,0 +1,83 @@
+name: PR Android Camera gst-plugins-bad Build
+
+on:
+  pull_request:
+    branches:
+      - android/camera
+    paths:
+      - 'subprojects/gst-plugins-bad/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Repository URL (https://github.com/gstreamer101/gstreamer.git)'
+        required: true
+        default: 'https://github.com/gstreamer101/gstreamer.git'
+      branch:
+        description: 'Branch name (android/camera)'
+        required: true
+        default: 'android/camera'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      PR_REPO_URL: ${{ github.event_name == 'workflow_dispatch' && format('https://x-access-token:{0}@github.com/gstreamer101/gstreamer.git', secrets.BUILD_PAT) || format('https://x-access-token:{0}@github.com/{1}/{2}.git', secrets.BUILD_PAT, github.event.pull_request.head.repo.owner.login, github.event.pull_request.head.repo.name) }}
+      PR_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.pull_request.head.ref }}
+
+    steps:
+      - name: Checkout forgekeeper (main)
+        uses: actions/checkout@v4
+        with:
+          repository: gstreamer101/forgekeeper
+          ref: main
+          path: forgekeeper
+
+      - name: Checkout cerbero (android/camera)
+        uses: actions/checkout@v4
+        with:
+          repository: gstreamer101/cerbero
+          ref: android/camera
+          token: ${{ secrets.BUILD_PAT }}
+          path: cerbero
+
+      - name: Checkout gstreamer (android/camera, PR HEAD)
+        uses: actions/checkout@v4
+        with:
+          repository: gstreamer101/gstreamer
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.BUILD_PAT }}
+          path: gstreamer
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip git curl
+          # 설치 setuptools 호환 버전 설치 (sandbox 모듈 포함)
+          pip3 install --upgrade pip
+          pip3 install setuptools>=75.0.1
+
+
+      - name: Prepare pr-local.cbc from template
+        run: |
+          export PR_REPO_URL="${PR_REPO_URL}"
+          export PR_BRANCH="${PR_BRANCH}"
+          envsubst < forgekeeper/gstreamer101/android/camera/pr-local.cbc.tmpl > forgekeeper/gstreamer101/android/camera/pr-local.cbc
+
+      - name: Bootstrap Cerbero (Android ARM64, Nougat+)
+        run: |
+          cd cerbero
+          ./cerbero-uninstalled \
+            -c ../forgekeeper/gstreamer101/android/camera/pr-local.cbc \
+            -c ../forgekeeper/gstreamer101/android/camera/pr-cross-android.cbc \
+            bootstrap
+
+      - name: Build gst-plugins-bad-1.0 (Android ARM64, Nougat+)
+        run: |
+          cd cerbero
+          ./cerbero-uninstalled \
+            -c ../forgekeeper/gstreamer101/android/camera/pr-local.cbc \
+            -c ../forgekeeper/gstreamer101/android/camera/pr-cross-android.cbc \
+            build gst-plugins-bad-1.0
+
