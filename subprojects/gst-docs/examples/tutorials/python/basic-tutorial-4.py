@@ -68,11 +68,11 @@ class Tutorial4:
                     print(f"Position {current} / {self.duration}\r")
 
                     # If seeking is enabled, we have not done it yet, and the time is right, seek
-                    if self.seek_enabled and not seek_done and current > 10 * Gst.SECOND:
+                    if self.seek_enabled and not self.seek_done and current > 10 * Gst.SECOND:
                         print("\nReached 10s, performing seek...")
                         self.playbin.seek_simple(Gst.Format.TIME,
                             Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, 30 * Gst.SECOND)
-                        seek_done = True
+                        self.seek_done = True
 
         self.playbin.set_state(Gst.State.NULL)
 
@@ -94,12 +94,12 @@ class Tutorial4:
                 old_state, new_state, self.pending_state = msg.parse_state_changed()
                 logger.info("Pipeline state changed from %s to %s", old_state, new_state)
                 # Remember whether we are in the PLAYING state or not
-                playing = new_state == Gst.State.PLAYING
-                if playing:
+                self.playing = new_state == Gst.State.PLAYING
+                if self.playing:
                     query = Gst.Query.new_seeking(Gst.Format.TIME)
                     if self.playbin.query(query):
-                        f, seek_enabled, start, end = query.parse_seeking()
-                        if seek_enabled:
+                        f, self.seek_enabled, start, end = query.parse_seeking()
+                        if self.seek_enabled:
                             logger.info(f"Seeking is ENABLED from {start} to {end}")
                         else:
                             logger.info("Seeking is DISABLED for this stream.")
